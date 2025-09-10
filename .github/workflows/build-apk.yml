@@ -25,26 +25,25 @@ jobs:
 
       - name: Unzip project
         run: |
-          ls -la
-          unzip -q "SWV_SiteSurvey_Pro_v2.zip" -d src
-          echo "Contents of src:"
-          ls -la src
-          # Adjust the folder name below if it differs after unzip
-          echo "Listing project:"
-          ls -la "src/SWV_SiteSurvey_Pro_v2"
+          unzip -q "*.zip" -d src
+          echo "Listing after unzip:"
+          ls -R src
 
-      - name: Set up Gradle 8.7
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: "8.7"
+      - name: Find Gradle project folder
+        id: findproject
+        run: |
+          project_dir=$(find src -name "gradlew" -exec dirname {} \; | head -n 1)
+          echo "Found project: $project_dir"
+          echo "project_dir=$project_dir" >> $GITHUB_ENV
 
       - name: Build debug APK
-        working-directory: src/SWV_SiteSurvey_Pro_v2
         run: |
-          gradle :app:assembleDebug
+          cd $project_dir
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: src/SWV_SiteSurvey_Pro_v2/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.project_dir }}/app/build/outputs/apk/debug/app-debug.apk
