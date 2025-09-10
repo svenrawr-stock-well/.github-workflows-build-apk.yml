@@ -44,6 +44,19 @@ jobs:
           echo "Found project_dir: $project_dir"
           echo "project_dir=$project_dir" >> "$GITHUB_ENV"
 
+      # ✅ Create/ensure gradle.properties enables AndroidX + Jetifier
+      - name: Ensure gradle.properties (AndroidX)
+        run: |
+          set -eux
+          GP="$project_dir/gradle.properties"
+          {
+            echo "android.useAndroidX=true"
+            echo "android.enableJetifier=true"
+            echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8"
+          } > "$GP"
+          echo "Wrote $GP:"
+          cat "$GP"
+
       - name: Prepare Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
@@ -53,10 +66,18 @@ jobs:
         run: |
           cd "$project_dir"
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace --info
+          ./gradlew assembleDebug --stacktrace --info | tee buildlog.txt
 
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: ${{ env.project_dir }}/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Gradle log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-log
+          path: ${{ env.project_dir }}/buildlog.txt
