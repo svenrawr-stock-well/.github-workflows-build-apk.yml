@@ -6,6 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -22,29 +23,43 @@ jobs:
       - name: Install Android SDK components
         run: sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Unzip project
+      - name: Unzip project (any *.zip at repo root)
         run: unzip -q "*.zip" -d src
 
-      - name: Detect project dir
-        id: detect
+      - name: Locate project root (gradlew)
+        id: locate
         run: |
-          PROJECT_DIR=$(find src -maxdepth 4 -type f -name "settings.gradle*" -printf '%h\n' | head -n 1)
-          echo "project_dir=$PROJECT_DIR" >> $GITHUB_ENV
+          ROOT=$(find src -type f -name gradlew -printf '%h\n' | head -n 1)
+          if [ -z "$ROOT" ]; then
+            echo "gradlew not found under src/ — check your ZIP contents." >&2
+            exit 1
+          fi
+          echo "Using project_dir=$ROOT"
+          echo "project_dir=$ROOT" >> $GITHUB_ENV
+          ls -la "$ROOT"
 
-      - name: Add gradle.properties
+      - name: Add gradle.properties (enable AndroidX)
         run: |
-          echo "android.useAndroidX=true" >> "$project_dir/gradle.properties"
-          echo "android.enableJetifier=true" >> "$project_dir/gradle.properties"
-          echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8" >> "$project_dir/gradle.properties"
-          cat "$project_dir/gradle.properties"
+          ROOT="$project_dir"
+          echo "android.useAndroidX=true" >  "$ROOT/gradle.properties"
+          echo "android.enableJetifier=true" >> "$ROOT/gradle.properties"
+          echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8" >> "$ROOT/gradle.properties"
+          echo "Created $ROOT/gradle.properties:"
+          cat "$ROOT/gradle.properties"
 
-      - name: Build debug APK
+      - name: Prepare Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Build debug APK (verbose logs)
         run: |
           cd "$project_dir"
           chmod +x gradlew || true
           ./gradlew :app:assembleDebug --stacktrace --info | tee buildlog.txt
 
-      - name: Upload APK
+      - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
@@ -56,3 +71,9 @@ jobs:
         with:
           name: gradle-log
           path: ${{ env.project_dir }}/buildlog.txt
+
+      - name: Show project structure (debug)
+        if: always()
+        run: |
+          echo "Top-level files under project_dir:"
+          find "$project_dir" -maxdepth 2 -type f | sort
