@@ -1,0 +1,50 @@
+name: Build Android APK (Tablet Friendly)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Unzip project
+        run: |
+          ls -la
+          unzip -q "SWV_SiteSurvey_Pro_v2.zip" -d src
+          echo "Contents of src:"
+          ls -la src
+          # Adjust the folder name below if it differs after unzip
+          echo "Listing project:"
+          ls -la "src/SWV_SiteSurvey_Pro_v2"
+
+      - name: Set up Gradle 8.7
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.7"
+
+      - name: Build debug APK
+        working-directory: src/SWV_SiteSurvey_Pro_v2
+        run: |
+          gradle :app:assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: src/SWV_SiteSurvey_Pro_v2/app/build/outputs/apk/debug/app-debug.apk
