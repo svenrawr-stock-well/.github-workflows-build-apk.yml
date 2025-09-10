@@ -1,12 +1,11 @@
-name: Build Android APK (Tablet Friendly)
+name: Build Android APK
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -21,66 +20,39 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install Android SDK components
-        run: |
-          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+        run: sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Unzip project (any *.zip at repo root)
-        run: |
-          set -eux
-          unzip -q "*.zip" -d src
-          echo "After unzip:"
-          ls -R src || true
+      - name: Unzip project
+        run: unzip -q "*.zip" -d src
 
-      - name: Detect project root (settings.gradle)
+      - name: Detect project dir
         id: detect
-        shell: bash
         run: |
-          set -e
-          PROJECT_DIR=$(find src -maxdepth 4 -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) -printf '%h\n' | head -n 1)
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "Could not find settings.gradle under src" >&2
-            exit 1
-          fi
-          echo "Found PROJECT_DIR=$PROJECT_DIR"
-          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_ENV"
+          PROJECT_DIR=$(find src -maxdepth 4 -type f -name "settings.gradle*" -printf '%h\n' | head -n 1)
+          echo "project_dir=$PROJECT_DIR" >> $GITHUB_ENV
 
-      # Create gradle.properties at the project root so AndroidX is enabled
-      - name: Create gradle.properties (AndroidX)
-        shell: bash
+      - name: Add gradle.properties
         run: |
-          set -e
-          GP="${project_dir}/gradle.properties"
-          cat > "$GP" << 'EOF'
-android.useAndroidX=true
-android.enableJetifier=true
-org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8
-EOF
-          echo "Wrote $GP:"
-          cat "$GP"
+          echo "android.useAndroidX=true" >> "$project_dir/gradle.properties"
+          echo "android.enableJetifier=true" >> "$project_dir/gradle.properties"
+          echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8" >> "$project_dir/gradle.properties"
+          cat "$project_dir/gradle.properties"
 
-      - name: Prepare Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.7'
-
-      - name: Build debug APK (verbose logs)
-        shell: bash
+      - name: Build debug APK
         run: |
-          set -e
-          cd "${project_dir}"
+          cd "$project_dir"
           chmod +x gradlew || true
           ./gradlew :app:assembleDebug --stacktrace --info | tee buildlog.txt
 
-      - name: Upload APK artifact
-        if: success()
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: "${{ env.project_dir }}/app/build/outputs/apk/debug/app-debug.apk"
+          path: ${{ env.project_dir }}/app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload Gradle log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gradle-log
-          path: "${{ env.project_dir }}/buildlog.txt"
+          path: ${{ env.project_dir }}/buildlog.txt
