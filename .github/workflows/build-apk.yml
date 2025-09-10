@@ -24,38 +24,26 @@ jobs:
         run: |
           sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Unzip project (any *.zip at repo root)
+      - name: Unzip project
         run: |
-          set -eux
           unzip -q "*.zip" -d src
           echo "After unzip:"
           ls -R src || true
 
-      - name: Locate Gradle project folder
-        id: findproject
-        shell: bash
-        run: |
-          set -e
-          project_dir=$(find src -type f -name "gradlew" -printf '%h\n' | head -n 1)
-          if [ -z "$project_dir" ]; then
-            echo "No Gradle wrapper (gradlew) found under src/. Check your ZIP." >&2
-            exit 1
-          fi
-          echo "Found project_dir: $project_dir"
-          echo "project_dir=$project_dir" >> "$GITHUB_ENV"
-
-      # ✅ Create/ensure gradle.properties enables AndroidX + Jetifier
       - name: Ensure gradle.properties (AndroidX)
         run: |
           set -eux
+          project_dir=$(find src -type f -name "settings.gradle*" -printf '%h\n' | head -n 1)
+          echo "Using project_dir=$project_dir"
           GP="$project_dir/gradle.properties"
           {
             echo "android.useAndroidX=true"
             echo "android.enableJetifier=true"
             echo "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8"
           } > "$GP"
-          echo "Wrote $GP:"
+          echo "Created gradle.properties:"
           cat "$GP"
+          echo "project_dir=$project_dir" >> $GITHUB_ENV
 
       - name: Prepare Gradle
         uses: gradle/actions/setup-gradle@v3
@@ -65,12 +53,22 @@ jobs:
       - name: Build debug APK (verbose logs)
         run: |
           cd "$project_dir"
-          chmod +x gradlew
+          chmod +x gradlew || true
           ./gradlew assembleDebug --stacktrace --info | tee buildlog.txt
 
       - name: Upload APK artifact
         if: success()
         uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: ${{ env.project_dir }}/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Gradle log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-log
+          path: ${{ env.project_dir }}/buildlog.txt        uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: ${{ env.project_dir }}/app/build/outputs/apk/debug/app-debug.apk
